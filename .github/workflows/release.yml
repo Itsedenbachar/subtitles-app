@@ -16,6 +16,10 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install npm dependencies
+        run: npm install
+        working-directory: subtitle-app
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
