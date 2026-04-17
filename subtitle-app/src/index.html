@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subtitle App</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #0f0f0f;
+      color: #f0f0f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      padding: 32px;
+      text-align: center;
+      gap: 20px;
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #2a2a2a;
+      border-top-color: #4a9eff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Text helpers */
+    .label {
+      font-size: 16px;
+      font-weight: 500;
+      color: #f0f0f0;
+    }
+    .subtext {
+      font-size: 13px;
+      color: #888;
+      max-width: 380px;
+      line-height: 1.5;
+    }
+
+    /* Buttons */
+    button {
+      padding: 11px 28px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #4a9eff;
+      color: #fff;
+      transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+    button:active { opacity: 0.7; }
+    button.secondary {
+      background: #1e1e1e;
+      color: #aaa;
+      border: 1px solid #333;
+    }
+    button.secondary:hover { color: #f0f0f0; border-color: #555; }
+
+    /* Checklist */
+    .checklist {
+      width: 100%;
+      max-width: 420px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 18px;
+      border-bottom: 1px solid #222;
+    }
+    .check-item:last-child { border-bottom: none; }
+    .check-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+      width: 24px;
+      text-align: center;
+    }
+    .check-text { text-align: left; }
+    .check-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #f0f0f0;
+    }
+    .check-name.done { color: #888; }
+    .check-sub {
+      font-size: 12px;
+      color: #555;
+      margin-top: 2px;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      width: 100%;
+      max-width: 480px;
+      background: #1a1a1a;
+      border: 2px dashed #333;
+      border-radius: 16px;
+      padding: 56px 32px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #4a9eff;
+      background: #111d2e;
+    }
+    .drop-zone .icon { font-size: 40px; line-height: 1; }
+    .drop-zone .drop-label {
+      font-size: 16px;
+      font-weight: 500;
+      color: #f0f0f0;
+    }
+    .drop-zone .drop-sub {
+      font-size: 13px;
+      color: #666;
+    }
+
+    /* Path box */
+    .path-box {
+      font-family: "SF Mono", "Menlo", monospace;
+      font-size: 12px;
+      color: #ccc;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      max-width: 480px;
+      width: 100%;
+      word-break: break-all;
+      user-select: text;
+      cursor: text;
+      text-align: left;
+    }
+
+    /* Error box */
+    .error-box {
+      font-size: 12px;
+      color: #e06c75;
+      background: #1a1010;
+      border: 1px solid #3a1a1a;
+      border-radius: 8px;
+      padding: 12px 16px;
+      max-width: 480px;
+      width: 100%;
+      max-height: 160px;
+      overflow-y: auto;
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Filename display */
+    .filename {
+      font-size: 13px;
+      color: #888;
+      max-width: 400px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .success-icon { font-size: 40px; }
+    .error-icon   { font-size: 40px; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+  const invoke = window.__TAURI__.core.invoke;
+  const app = document.getElementById('app');
+
+  let currentFile = null;
+
+  function render(state, data) {
+    app.innerHTML = '';
+
+    // ── Checking ──────────────────────────────────────────────
+    if (state === 'checking') {
+      app.appendChild(spinner());
+      app.appendChild(label('Checking your setup...'));
+
+      invoke('check_for_updates').catch(() => {}).then(() => {
+        return Promise.all([
+          invoke('check_setup'),
+          invoke('check_ffmpeg'),
+          invoke('check_model_downloaded'),
+        ]);
+      }).then(([mlx, ffmpeg, model]) => {
+        if (mlx && ffmpeg && model) {
+          transition('ready');
+        } else {
+          transition('onboarding', { mlx, ffmpeg, model });
+        }
+      }).catch(e => {
+        transition('error', { message: String(e) });
+      });
+    }
+
+    // ── Onboarding ────────────────────────────────────────────
+    else if (state === 'onboarding') {
+      const { mlx, ffmpeg, model } = data;
+      const allReady = mlx && ffmpeg && model;
+
+      app.appendChild(label(allReady ? 'Ready to transcribe' : 'One-time setup needed'));
+      if (!allReady) {
+        app.appendChild(subtext('These tools will be installed automatically. This only happens once.'));
+      }
+
+      const list = document.createElement('div');
+      list.className = 'checklist';
+
+      list.appendChild(checkItem(
+        mlx,
+        'mlx-whisper',
+        'AI transcription engine'
+      ));
+      list.appendChild(checkItem(
+        ffmpeg,
+        'ffmpeg',
+        'Audio/video decoder'
+      ));
+      list.appendChild(checkItem(
+        model,
+        'AI Model',
+        '~1.6 GB · downloads once'
+      ));
+
+      app.appendChild(list);
+
+      if (!allReady) {
+        const btn = button('Install Everything', () => {
+          runSetup({ mlx, ffmpeg, model });
+        });
+        app.appendChild(btn);
+      } else {
+        app.appendChild(button('Continue', () => transition('ready')));
+      }
+    }
+
+    // ── Installing mlx-whisper ────────────────────────────────
+    else if (state === 'installing_mlx') {
+      app.appendChild(spinner());
+      app.appendChild(label('Installing mlx-whisper...'));
+      app.appendChild(subtext('This takes about a minute.'));
+
+      invoke('install_mlx_whisper').then(() => {
+        const next = data || {};
+        if (!next.ffmpeg) {
+          transition('installing_ffmpeg', { model: next.model });
+        } else if (!next.model) {
+          transition('downloading_model');
+        } else {
+          transition('ready');
+        }
+      }).catch(e => {
+        transition('error', { message: String(e) });
+      });
+    }
+
+    // ── Installing ffmpeg ─────────────────────────────────────
+    else if (state === 'installing_ffmpeg') {
+      app.appendChild(spinner());
+      app.appendChild(label('Installing ffmpeg...'));
+      app.appendChild(subtext('Downloading via Homebrew. May take a few minutes.'));
+
+      invoke('install_ffmpeg').then(() => {
+        const next = data || {};
+        if (!next.model) {
+          transition('downloading_model');
+        } else {
+          transition('ready');
+        }
+      }).catch(e => {
+        transition('error', { message: String(e) });
+      });
+    }
+
+    // ── Downloading model ─────────────────────────────────────
+    else if (state === 'downloading_model') {
+      app.appendChild(spinner());
+      app.appendChild(label('Downloading AI model...'));
+      app.appendChild(subtext('About 1.6 GB · only happens once · do not close the app.'));
+
+      invoke('download_model').then(() => {
+        transition('ready');
+      }).catch(e => {
+        transition('error', { message: String(e) });
+      });
+    }
+
+    // ── Ready ─────────────────────────────────────────────────
+    else if (state === 'ready') {
+      app.appendChild(dropZone());
+    }
+
+    // ── Transcribing ──────────────────────────────────────────
+    else if (state === 'transcribing') {
+      const file = data && data.file ? data.file : currentFile;
+      const name = file ? file.split('/').pop() : '';
+
+      app.appendChild(spinner());
+
+      const lbl = label('Transcribing');
+      app.appendChild(lbl);
+      let dots = 0;
+      const dotTimer = setInterval(() => {
+        dots = (dots + 1) % 4;
+        lbl.textContent = 'Transcribing' + '.'.repeat(dots);
+      }, 500);
+
+      if (name) {
+        const fn_ = document.createElement('p');
+        fn_.className = 'filename';
+        fn_.textContent = name;
+        app.appendChild(fn_);
+      }
+
+      invoke('transcribe', { videoPath: file }).then(srtPath => {
+        clearInterval(dotTimer);
+        transition('done', { srtPath });
+      }).catch(e => {
+        clearInterval(dotTimer);
+        transition('error', { message: String(e) });
+      });
+    }
+
+    // ── Done ──────────────────────────────────────────────────
+    else if (state === 'done') {
+      const srtPath = data && data.srtPath ? data.srtPath : '';
+
+      const icon = document.createElement('div');
+      icon.className = 'success-icon';
+      icon.textContent = '✅';
+      app.appendChild(icon);
+
+      app.appendChild(label('Done!'));
+
+      const box = document.createElement('div');
+      box.className = 'path-box';
+      box.textContent = srtPath;
+      app.appendChild(box);
+
+      app.appendChild(button('Transcribe another file', () => transition('ready'), true));
+    }
+
+    // ── Error ─────────────────────────────────────────────────
+    else if (state === 'error') {
+      const message = data && data.message ? data.message : 'Unknown error';
+
+      const icon = document.createElement('div');
+      icon.className = 'error-icon';
+      icon.textContent = '❌';
+      app.appendChild(icon);
+
+      app.appendChild(label('Something went wrong'));
+
+      const box = document.createElement('div');
+      box.className = 'error-box';
+      box.textContent = message;
+      app.appendChild(box);
+
+      app.appendChild(button('Try again', () => transition('checking'), true));
+    }
+  }
+
+  function transition(state, data) {
+    render(state, data);
+  }
+
+  function runSetup({ mlx, ffmpeg, model }) {
+    if (!mlx) {
+      transition('installing_mlx', { ffmpeg, model });
+    } else if (!ffmpeg) {
+      transition('installing_ffmpeg', { model });
+    } else if (!model) {
+      transition('downloading_model');
+    } else {
+      transition('ready');
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+
+  function spinner() {
+    const el = document.createElement('div');
+    el.className = 'spinner';
+    return el;
+  }
+
+  function label(text) {
+    const el = document.createElement('p');
+    el.className = 'label';
+    el.textContent = text;
+    return el;
+  }
+
+  function subtext(text) {
+    const el = document.createElement('p');
+    el.className = 'subtext';
+    el.textContent = text;
+    return el;
+  }
+
+  function button(text, onClick, secondary) {
+    const el = document.createElement('button');
+    el.textContent = text;
+    if (secondary) el.classList.add('secondary');
+    el.addEventListener('click', onClick);
+    return el;
+  }
+
+  function checkItem(done, name, sub) {
+    const row = document.createElement('div');
+    row.className = 'check-item';
+
+    const icon = document.createElement('div');
+    icon.className = 'check-icon';
+    icon.textContent = done ? '✅' : '❌';
+
+    const text = document.createElement('div');
+    text.className = 'check-text';
+
+    const nm = document.createElement('div');
+    nm.className = 'check-name' + (done ? ' done' : '');
+    nm.textContent = name;
+
+    const sb = document.createElement('div');
+    sb.className = 'check-sub';
+    sb.textContent = sub;
+
+    text.appendChild(nm);
+    text.appendChild(sb);
+    row.appendChild(icon);
+    row.appendChild(text);
+    return row;
+  }
+
+  function dropZone() {
+    const zone = document.createElement('div');
+    zone.className = 'drop-zone';
+
+    const icon = document.createElement('div');
+    icon.className = 'icon';
+    icon.textContent = '🎬';
+
+    const lbl = document.createElement('p');
+    lbl.className = 'drop-label';
+    lbl.textContent = 'Drop a video or audio file here';
+
+    const sub = document.createElement('p');
+    sub.className = 'drop-sub';
+    sub.textContent = 'or click to choose a file';
+
+    zone.appendChild(icon);
+    zone.appendChild(lbl);
+    zone.appendChild(sub);
+
+    zone.addEventListener('click', async () => {
+      try {
+        const selected = await window.__TAURI__.dialog.open({
+          multiple: false,
+          filters: [{ name: 'Video / Audio', extensions: ['mp4', 'mov', 'avi', 'mkv', 'm4v', 'mp3', 'wav'] }],
+        });
+        if (selected) {
+          currentFile = selected;
+          transition('transcribing', { file: selected });
+        }
+      } catch (e) {
+        // user cancelled
+      }
+    });
+
+    zone.addEventListener('dragover', e => {
+      e.preventDefault();
+      zone.classList.add('dragover');
+    });
+
+    zone.addEventListener('dragleave', () => {
+      zone.classList.remove('dragover');
+    });
+
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.path) {
+        currentFile = file.path;
+        transition('transcribing', { file: file.path });
+      }
+    });
+
+    return zone;
+  }
+
+  // Boot
+  transition('checking');
+</script>
+</body>
+</html>

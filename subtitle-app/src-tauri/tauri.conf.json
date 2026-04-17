@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "subtitle-app",
+  "version": "0.1.0",
+  "identifier": "com.edenbachar.subtitle-app",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "subtitle-app",
+        "width": 800,
+        "height": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxREYxOTZDMzg1RjgwQ0YKUldUUGdGODRiQm5mc2NMQmZMMXpyUGkrZHROcWVYaTZXdENoa2NTTk5kTkpiT2hUNDE2WDZ6RWQK",
+      "endpoints": [
+        "https://github.com/edenbachar/subtitle-app/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
