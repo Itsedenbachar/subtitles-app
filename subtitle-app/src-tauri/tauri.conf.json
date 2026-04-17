@@ -34,7 +34,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxREYxOTZDMzg1RjgwQ0YKUldUUGdGODRiQm5mc2NMQmZMMXpyUGkrZHROcWVYaTZXdENoa2NTTk5kTkpiT2hUNDE2WDZ6RWQK",
       "endpoints": [
-        "https://github.com/edenbachar/subtitles-app/releases/latest/download/latest.json"
+        "https://github.com/Itsedenbachar/subtitles-app/releases/latest/download/latest.json"
       ]
     }
   }
