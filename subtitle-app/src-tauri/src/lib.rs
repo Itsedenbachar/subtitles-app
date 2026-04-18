@@ -185,7 +185,8 @@ sys.stdout = ProgressOut()
 result = mlx_whisper.transcribe(
     video_path,
     path_or_hf_repo="mlx-community/whisper-large-v3-mlx",
-    word_timestamps=True
+    word_timestamps=True,
+    verbose=True
 )
 
 sys.stdout = real_stdout
@@ -281,7 +282,8 @@ sys.stdout = ProgressOut()
 result = mlx_whisper.transcribe(
     video_path,
     path_or_hf_repo="mlx-community/whisper-large-v3-mlx",
-    word_timestamps=False
+    word_timestamps=False,
+    verbose=True
 )
 
 sys.stdout = real_stdout
