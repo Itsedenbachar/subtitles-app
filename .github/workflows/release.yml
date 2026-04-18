@@ -27,6 +27,19 @@ jobs:
         with:
           targets: aarch64-apple-darwin
 
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          python3 -c "
+          import json
+          with open('subtitle-app/src-tauri/tauri.conf.json') as f:
+              c = json.load(f)
+          c['version'] = '$VERSION'
+          with open('subtitle-app/src-tauri/tauri.conf.json', 'w') as f:
+              json.dump(c, f, indent=2)
+          "
+          sed -i '' "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" subtitle-app/src-tauri/Cargo.toml
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
