@@ -184,6 +184,73 @@
 
     .success-icon { font-size: 40px; }
     .error-icon   { font-size: 40px; }
+
+    /* Progress bar */
+    .progress-wrap {
+      width: 100%;
+      max-width: 400px;
+      background: #1e1e1e;
+      border-radius: 100px;
+      height: 5px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #4a9eff;
+      border-radius: 100px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+    .progress-pct {
+      font-size: 13px;
+      color: #555;
+    }
+
+    /* Mode toggle */
+    .mode-toggle {
+      display: flex;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 3px;
+      gap: 3px;
+    }
+    .mode-btn {
+      padding: 8px 22px;
+      border: none;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      background: transparent;
+      color: #666;
+      transition: all 0.15s;
+    }
+    .mode-btn.active {
+      background: #2a2a2a;
+      color: #f0f0f0;
+    }
+    .mode-btn:hover:not(.active) { color: #aaa; opacity: 1; }
+
+    /* Transcript text box */
+    .transcript-box {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      color: #ddd;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 16px 18px;
+      max-width: 480px;
+      width: 100%;
+      max-height: 220px;
+      overflow-y: auto;
+      text-align: left;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: text;
+    }
   </style>
 </head>
 <body>
@@ -194,6 +261,7 @@
   const app = document.getElementById('app');
 
   let currentFile = null;
+  let currentMode = 'subtitles';
 
   function render(state, data) {
     app.innerHTML = '';
@@ -246,7 +314,7 @@
       list.appendChild(checkItem(
         model,
         'AI Model',
-        '~1.6 GB · downloads once'
+        '~3 GB · downloads once'
       ));
 
       app.appendChild(list);
@@ -303,7 +371,7 @@
     else if (state === 'downloading_model') {
       app.appendChild(spinner());
       app.appendChild(label('Downloading AI model...'));
-      app.appendChild(subtext('About 1.6 GB · only happens once · do not close the app.'));
+      app.appendChild(subtext('About 3 GB · only happens once · do not close the app.'));
 
       invoke('download_model').then(() => {
         transition('ready');
@@ -314,6 +382,7 @@
 
     // ── Ready ─────────────────────────────────────────────────
     else if (state === 'ready') {
+      app.appendChild(modeToggle());
       app.appendChild(dropZone());
     }
 
@@ -323,14 +392,7 @@
       const name = file ? file.split('/').pop() : '';
 
       app.appendChild(spinner());
-
-      const lbl = label('Transcribing');
-      app.appendChild(lbl);
-      let dots = 0;
-      const dotTimer = setInterval(() => {
-        dots = (dots + 1) % 4;
-        lbl.textContent = 'Transcribing' + '.'.repeat(dots);
-      }, 500);
+      app.appendChild(label('Transcribing'));
 
       if (name) {
         const fn_ = document.createElement('p');
@@ -339,18 +401,43 @@
         app.appendChild(fn_);
       }
 
-      invoke('transcribe', { videoPath: file }).then(srtPath => {
-        clearInterval(dotTimer);
-        transition('done', { srtPath });
+      const progressWrap = document.createElement('div');
+      progressWrap.className = 'progress-wrap';
+      const progressFill = document.createElement('div');
+      progressFill.className = 'progress-fill';
+      progressWrap.appendChild(progressFill);
+      app.appendChild(progressWrap);
+
+      const pctLabel = document.createElement('p');
+      pctLabel.className = 'progress-pct';
+      pctLabel.textContent = '0%';
+      app.appendChild(pctLabel);
+
+      const pollTimer = setInterval(() => {
+        invoke('get_progress').then(pct => {
+          progressFill.style.width = pct + '%';
+          pctLabel.textContent = Math.round(pct) + '%';
+        }).catch(() => {});
+      }, 500);
+
+      const mode = data && data.mode ? data.mode : currentMode;
+      const cmd = mode === 'subtitles' ? 'transcribe' : 'transcribe_text';
+
+      invoke(cmd, { videoPath: file }).then(result => {
+        clearInterval(pollTimer);
+        progressFill.style.width = '100%';
+        pctLabel.textContent = '100%';
+        setTimeout(() => transition('done', { result, mode }), 300);
       }).catch(e => {
-        clearInterval(dotTimer);
+        clearInterval(pollTimer);
         transition('error', { message: String(e) });
       });
     }
 
     // ── Done ──────────────────────────────────────────────────
     else if (state === 'done') {
-      const srtPath = data && data.srtPath ? data.srtPath : '';
+      const mode = data && data.mode ? data.mode : 'subtitles';
+      const result = data && data.result ? data.result : '';
 
       const icon = document.createElement('div');
       icon.className = 'success-icon';
@@ -359,10 +446,25 @@
 
       app.appendChild(label('Done!'));
 
-      const box = document.createElement('div');
-      box.className = 'path-box';
-      box.textContent = srtPath;
-      app.appendChild(box);
+      if (mode === 'subtitles') {
+        const box = document.createElement('div');
+        box.className = 'path-box';
+        box.textContent = result;
+        app.appendChild(box);
+      } else {
+        const box = document.createElement('div');
+        box.className = 'transcript-box';
+        box.textContent = result;
+        app.appendChild(box);
+
+        const copyBtn = button('Copy text', () => {
+          navigator.clipboard.writeText(result).then(() => {
+            copyBtn.textContent = 'Copied!';
+            setTimeout(() => { copyBtn.textContent = 'Copy text'; }, 2000);
+          });
+        });
+        app.appendChild(copyBtn);
+      }
 
       app.appendChild(button('Transcribe another file', () => transition('ready'), true));
     }
@@ -404,6 +506,25 @@
   }
 
   // ── Helpers ───────────────────────────────────────────────────
+
+  function modeToggle() {
+    const wrap = document.createElement('div');
+    wrap.className = 'mode-toggle';
+
+    ['Subtitles', 'Transcribe'].forEach(label => {
+      const btn = document.createElement('button');
+      btn.className = 'mode-btn' + (currentMode === label.toLowerCase() ? ' active' : '');
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        currentMode = label.toLowerCase();
+        wrap.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+      wrap.appendChild(btn);
+    });
+
+    return wrap;
+  }
 
   function spinner() {
     const el = document.createElement('div');
@@ -487,7 +608,7 @@
         });
         if (selected) {
           currentFile = selected;
-          transition('transcribing', { file: selected });
+          transition('transcribing', { file: selected, mode: currentMode });
         }
       } catch (e) {
         // user cancelled
@@ -509,7 +630,7 @@
       const file = e.dataTransfer.files[0];
       if (file && file.path) {
         currentFile = file.path;
-        transition('transcribing', { file: file.path });
+        transition('transcribing', { file: file.path, mode: currentMode });
       }
     });
 
